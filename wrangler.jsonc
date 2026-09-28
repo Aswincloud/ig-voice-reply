@@ -49,8 +49,10 @@
     "SIGNOFF_TEXT": "சரி, எனக்கு கொஞ்சம் வேலை இருக்கு. நான் அப்புறம் பேசுறேன்!",
     // Spoken when Claude declines the topic (18+ etc.) — a light deflection.
     "REFUSAL_TEXT": "ஐயோ, அதைப் பற்றி வேணாம் டா. வேற எதாவது சொல்லு!",
-    // Spoken when Claude is unavailable, so the friend still hears something.
-    "FALLBACK_TEXT": "ஹே, மெசேஜ் பார்த்தேன். அஸ்வின் கொஞ்ச நேரத்துல ரிப்ளை பண்ணுவான்.",
+    // Spoken when Claude is unavailable, so the friend still hears something. Keeps
+    // the conversation open ("didn't catch that, say it again?") rather than
+    // promising that Aswin will reply later.
+    "FALLBACK_TEXT": "ஹே, சரியா கேக்கல டா. இன்னொரு தடவ சொல்லு?",
     // Chatwoot route (README, "Reaching people who hold no role on the Meta app").
     // Self-hosted Chatwoot (~/chatwoot) with an Instagram inbox on the Instagram-Login route,
     // which delivers everyone's DMs; API and webhooks are free when self-hosted.
