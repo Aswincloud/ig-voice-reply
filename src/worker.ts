@@ -41,7 +41,7 @@ const PCM_RATE = 24000; // must match output_format=pcm_24000 below
 const AUDIO_TTL_S = 300; // Instagram fetches within seconds; 5 min is generous
 const SEEN_TTL_S = 600; // Meta retries a delivery it thinks failed; dedupe on mid
 const TOKEN_CHECK_TTL_S = 300; // /health re-validates the token at most this often
-const VERSION = "0.3.0";
+const VERSION = "0.3.1";
 const HISTORY_TURNS = 12; // messages kept per person for context
 const HISTORY_TTL_S = 48 * 3600;
 const USAGE_TTL_S = 2 * 86400;
@@ -217,15 +217,19 @@ async function handleEvent(evt: MessagingEvent, env: Env): Promise<void> {
 
   // ---- speak it ------------------------------------------------------------
   const pcm = await tts(env, text);
+  // ElevenLabs has charged for these characters the moment TTS returns, so count
+  // them now, before the send. A failed send must not leave the day's budget
+  // under-reporting what was actually spent.
+  const nowUsed = used + text.length;
+  await env.KV.put(`usage:${today}`, String(nowUsed), { expirationTtl: USAGE_TTL_S });
+  if (kind === "signoff") await env.KV.put(`signoff:${today}`, "1", { expirationTtl: USAGE_TTL_S });
+
   const wav = pcmToWav(pcm, PCM_RATE);
   const key = crypto.randomUUID();
   await env.KV.put(`audio:${key}`, wav, { expirationTtl: AUDIO_TTL_S });
   await sendAudio(env, from, `${env.PUBLIC_ORIGIN}/audio/${key}`);
 
-  // ---- bookkeeping ---------------------------------------------------------
-  const nowUsed = used + text.length;
-  await env.KV.put(`usage:${today}`, String(nowUsed), { expirationTtl: USAGE_TTL_S });
-  if (kind === "signoff") await env.KV.put(`signoff:${today}`, "1", { expirationTtl: USAGE_TTL_S });
+  // ---- bookkeeping that only makes sense once the friend actually got it ----
   if (kind === "reply" || kind === "refusal") {
     history.push({ role: "assistant", content: text });
     history = history.slice(-HISTORY_TURNS);
