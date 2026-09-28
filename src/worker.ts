@@ -41,7 +41,7 @@ const PCM_RATE = 24000; // must match output_format=pcm_24000 below
 const AUDIO_TTL_S = 300; // Instagram fetches within seconds; 5 min is generous
 const SEEN_TTL_S = 600; // Meta retries a delivery it thinks failed; dedupe on mid
 const TOKEN_CHECK_TTL_S = 300; // /health re-validates the token at most this often
-const VERSION = "0.3.3";
+const VERSION = "0.3.4";
 const HISTORY_TURNS = 12; // messages kept per person for context
 const HISTORY_TTL_S = 48 * 3600;
 const USAGE_TTL_S = 2 * 86400;
@@ -158,12 +158,15 @@ async function handleEvent(evt: MessagingEvent, env: Env): Promise<void> {
   if (!msg) return;
 
   // Echoes are our own sends (and anything you type in the Instagram app);
-  // replying to those loops forever. But in discovery mode they are the easiest
-  // way to learn someone's Instagram-scoped id without asking them to write
-  // first: message them from the app, and the echo names them as recipient.
+  // replying to those loops forever. They are also the easiest way to learn
+  // someone's Instagram-scoped id without asking them to write first: message
+  // them from the app, and the echo names them as recipient. Log that id whenever
+  // it is not the person already allowlisted, so switching person never needs
+  // the allowlist cleared first. It is the owner's own outbound activity.
   if (msg.is_echo) {
-    if (!env.ALLOWED_IGSID && evt.recipient?.id) {
-      console.log(`discovery (echo): you sent a message to recipient id ${evt.recipient.id} (set ALLOWED_IGSID to reply to them)`);
+    const to = evt.recipient?.id;
+    if (to && to !== env.ALLOWED_IGSID) {
+      console.log(`echo: you sent a message to recipient id ${to}${env.ALLOWED_IGSID ? "" : " (set ALLOWED_IGSID to reply to them)"}`);
     }
     return;
   }

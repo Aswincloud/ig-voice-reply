@@ -146,9 +146,11 @@ Now create the two webhook subscriptions (step 2e). `GET /health` should report
 
 Instagram-scoped user ids are per (person, your account) and are not visible in the
 app. Until `ALLOWED_IGSID` is set the Worker is in **discovery mode**: it logs the
-sender id of each incoming message, and the recipient id of each message *you*
-send, and does nothing else. So you can learn someone's id either by having them
-message you, or by messaging them from the Instagram app yourself.
+sender id of each incoming message and does nothing else. Separately, and in every
+mode, the recipient id of any message *you* send to someone other than the
+allowlisted person is logged (`echo: you sent a message to recipient id …`). So to
+switch to a new person, message them once from the Instagram app, read the id, and
+`wrangler secret put ALLOWED_IGSID`; nothing needs clearing first.
 
 ```sh
 npm run tail
