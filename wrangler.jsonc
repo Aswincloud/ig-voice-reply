@@ -52,10 +52,12 @@
     // Spoken when Claude is unavailable, so the friend still hears something.
     "FALLBACK_TEXT": "ஹே, மெசேஜ் பார்த்தேன். அஸ்வின் கொஞ்ச நேரத்துல ரிப்ளை பண்ணுவான்.",
     // Chatwoot route (README, "Reaching people who hold no role on the Meta app").
+    // Self-hosted Chatwoot (~/chatwoot) with an Instagram inbox on the Instagram-Login route,
+    // which delivers everyone's DMs; API and webhooks are free when self-hosted.
     // The account id is the number in the Chatwoot URL: /app/accounts/<id>/...
     // CHATWOOT_INBOX_ID narrows to one inbox; empty acts on every inbox in the account.
-    "CHATWOOT_BASE_URL": "https://app.chatwoot.com",
-    "CHATWOOT_ACCOUNT_ID": "",
-    "CHATWOOT_INBOX_ID": ""
+    "CHATWOOT_BASE_URL": "https://support.aswincloud.com",
+    "CHATWOOT_ACCOUNT_ID": "2",
+    "CHATWOOT_INBOX_ID": "6"
   }
 }
