@@ -41,7 +41,7 @@ const PCM_RATE = 24000; // must match output_format=pcm_24000 below
 const AUDIO_TTL_S = 300; // Instagram fetches within seconds; 5 min is generous
 const SEEN_TTL_S = 600; // Meta retries a delivery it thinks failed; dedupe on mid
 const TOKEN_CHECK_TTL_S = 300; // /health re-validates the token at most this often
-const VERSION = "0.3.4";
+const VERSION = "0.3.5";
 const HISTORY_TURNS = 12; // messages kept per person for context
 const HISTORY_TTL_S = 48 * 3600;
 const USAGE_TTL_S = 2 * 86400;
@@ -222,11 +222,11 @@ async function handleEvent(evt: MessagingEvent, env: Env): Promise<void> {
   console.log(`say (${kind}, ${text.length} chars): ${text}`);
 
   // ---- speak it ------------------------------------------------------------
-  const pcm = await tts(env, text);
-  // ElevenLabs has charged for these characters the moment TTS returns, so count
-  // them now, before the send. A failed send must not leave the day's budget
+  const { pcm, cost } = await tts(env, text);
+  // ElevenLabs has charged for this the moment TTS returns, so record it now,
+  // before the send. A failed send must not leave the day's budget
   // under-reporting what was actually spent.
-  const nowUsed = used + text.length;
+  const nowUsed = used + cost;
   await env.KV.put(`usage:${today}`, String(nowUsed), { expirationTtl: USAGE_TTL_S });
   if (kind === "signoff") await env.KV.put(`signoff:${today}`, "1", { expirationTtl: USAGE_TTL_S });
 
@@ -242,10 +242,14 @@ async function handleEvent(evt: MessagingEvent, env: Env): Promise<void> {
     await env.KV.put(histKey, JSON.stringify(history), { expirationTtl: HISTORY_TTL_S });
   }
   if (cooldownMin > 0) await env.KV.put(lastKey, String(Date.now()), { expirationTtl: cooldownMin * 60 + 60 });
-  console.log(`replied (${kind}) to ${from}: ${text.length} chars, ${wav.byteLength} bytes audio, ${nowUsed}/${limit} credits today`);
+  console.log(`replied (${kind}) to ${from}: ${text.length} chars = ${cost} credits, ${wav.byteLength} bytes audio, ${nowUsed}/${limit} credits today`);
 }
 
-async function tts(env: Env, textToSpeak: string): Promise<ArrayBuffer> {
+// Returns the audio and what ElevenLabs actually charged for it. The response
+// carries `character-cost`; recording that instead of text.length keeps the
+// daily budget exact. eleven_v3 has billed about half a credit per character
+// on Tamil script, so counting characters over-charged the budget two-to-one.
+async function tts(env: Env, textToSpeak: string): Promise<{ pcm: ArrayBuffer; cost: number }> {
   const res = await fetch(
     `https://api.elevenlabs.io/v1/text-to-speech/${env.ELEVENLABS_VOICE_ID}?output_format=pcm_${PCM_RATE}`,
     {
@@ -255,7 +259,9 @@ async function tts(env: Env, textToSpeak: string): Promise<ArrayBuffer> {
     },
   );
   if (!res.ok) throw new Error(`elevenlabs ${res.status}: ${(await res.text()).slice(0, 300)}`);
-  return res.arrayBuffer();
+  const header = Number(res.headers.get("character-cost"));
+  const cost = Number.isFinite(header) && header > 0 ? header : textToSpeak.length; // fall back to counting characters
+  return { pcm: await res.arrayBuffer(), cost };
 }
 
 // Instagram messaging through a linked Facebook Page uses the Messenger Platform

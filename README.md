@@ -241,10 +241,11 @@ hears something.
 ## The daily budget
 
 `DAILY_CREDIT_LIMIT` is ElevenLabs credits per day in the owner's timezone
-(Asia/Kolkata). `eleven_v3` bills one credit per character, so it is counted as
-characters sent to TTS, in KV under `usage:<date>`. The account's real counter is not
-readable when the API key is scoped to `text_to_speech` only, which is the recommended
-scope.
+(Asia/Kolkata). Spend is recorded from the `character-cost` header ElevenLabs returns
+with every TTS response, in KV under `usage:<date>`, so it matches what the account is
+actually billed. (Observed: `eleven_v3` charges about half a credit per character on
+Tamil script.) The account's own counter is not readable when the API key is scoped to
+`text_to_speech` only, which is the recommended scope.
 
 When the remainder can no longer fit another reply plus the sign-off, `SIGNOFF_TEXT`
 is spoken once ("Seri, enaku konjam work iruku. Naan aprom pesuren!") and the Worker

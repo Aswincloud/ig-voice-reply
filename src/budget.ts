@@ -1,6 +1,9 @@
-// Daily ElevenLabs credit budget. Credits are counted locally as characters sent
-// to TTS (eleven_v3 bills 1 credit per character), because the API key is scoped
-// to text_to_speech only and cannot read the account's real counter.
+// Daily ElevenLabs credit budget. Spend is recorded from the `character-cost`
+// header ElevenLabs returns with each TTS response, because the API key is scoped
+// to text_to_speech only and cannot read the account's real counter. The
+// `estimate` and `reserve` passed in are in characters, which over-estimates
+// credits when the model bills less than one per character; that errs toward
+// signing off slightly early, never toward overspending.
 //
 // "Daily" is the owner's day: Asia/Kolkata, not UTC.
 
