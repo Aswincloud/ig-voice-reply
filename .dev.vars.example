@@ -7,6 +7,12 @@ ELEVENLABS_API_KEY=
 # The voice to speak in. Your own cloned voice works here.
 ELEVENLABS_VOICE_ID=
 
+# Anthropic — generates each reply from what the friend wrote (persona: src/prompt.ts).
+# https://console.anthropic.com/settings/keys
+ANTHROPIC_API_KEY=
+# Optional: a gateway in front of the API. Leave empty for api.anthropic.com.
+ANTHROPIC_BASE_URL=
+
 # Meta developer app (Instagram API with Instagram Login)
 # App settings -> Basic -> App Secret. Used to verify webhook signatures.
 META_APP_SECRET=

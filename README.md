@@ -1,13 +1,18 @@
 # ig-voice-reply
 
-Replies to Instagram DMs from **one allowlisted person** with a voice note generated
-by ElevenLabs. Runs entirely on Cloudflare Workers; no server, no ffmpeg.
+Replies to Instagram DMs from **one allowlisted person** with a voice note: Claude
+writes a short, friendly line in the friend's own language (Tamil-in-Latin-script or
+English), ElevenLabs speaks it. A daily credit budget caps the spend and signs off
+politely when it's nearly used. Runs entirely on Cloudflare Workers; no server, no
+ffmpeg.
 
 ```
 that person DMs your Instagram account
   → Meta webhook → this Worker (signature verified)
   → sender is the allowlisted IGSID?   no → drop
-  → ElevenLabs TTS  (raw PCM)
+  → daily credit budget: room? / sign off once / stay quiet
+  → Claude writes the reply from the last few turns   (persona: src/prompt.ts)
+  → ElevenLabs eleven_v3 TTS  (raw PCM)
   → 44-byte WAV header prepended
   → stored in KV for 5 minutes
   → Graph API: send audio attachment by URL
@@ -42,9 +47,14 @@ Everyone else who messages you is ignored and, once configured, never logged.
 
 ### 1. ElevenLabs
 
-Create an API key at <https://elevenlabs.io/app/settings/api-keys> and pick a voice
-id. To reply in your own voice, Instant Voice Clone on the Starter plan needs about a
-minute of clean audio.
+Create an API key at <https://elevenlabs.io/app/settings/api-keys>. Scope it to
+**Text to Speech** only; that is all the Worker needs, and a leaked key then cannot
+list or clone voices. The trade is that the Worker cannot read your credit balance,
+which is why the budget is counted locally.
+
+Pick a voice id: Voices → the voice → ⋯ → **Copy voice ID**. A Voice Library voice
+must be added to *My Voices* first or the API will not accept its id. To reply in your
+own voice, Instant Voice Clone on the Starter plan needs about a minute of clean audio.
 
 ### 2. Meta developer app and the Page token
 
@@ -119,6 +129,7 @@ record (custom domain, in `wrangler.jsonc`). Change that hostname if you fork th
 Then set the secrets. None of them go in git.
 
 ```sh
+npx wrangler secret put ANTHROPIC_API_KEY      # console.anthropic.com/settings/keys
 npx wrangler secret put ELEVENLABS_API_KEY
 npx wrangler secret put ELEVENLABS_VOICE_ID
 npx wrangler secret put META_APP_SECRET
@@ -163,10 +174,15 @@ Non-secret settings live in `wrangler.jsonc` under `vars`.
 
 | var | default | meaning |
 |---|---|---|
-| `REPLY_TEXT` | a short "got your message" line | what gets spoken |
-| `REPLY_COOLDOWN_MINUTES` | `0` | `0` replies to every message. `60` sends at most one voice note an hour, like an away message |
-| `ELEVENLABS_MODEL_ID` | `eleven_flash_v2_5` | fast and multilingual. `eleven_multilingual_v2` is higher quality and slower |
-| `GRAPH_API_VERSION` | `v24.0` | bump occasionally; Meta retires versions after roughly two years |
+| `ANTHROPIC_MODEL` | `claude-opus-5` | writes the reply |
+| `MAX_REPLY_CHARS` | `160` | hard cap on a spoken reply; trimmed at a sentence end |
+| `DAILY_CREDIT_LIMIT` | `1000` | ElevenLabs credits per IST day; `0` disables |
+| `SIGNOFF_TEXT` | Tanglish "I have some work, talk later" | spoken once when the budget is nearly gone |
+| `REFUSAL_TEXT` | Tanglish "let's not talk about that" | spoken when Claude declines |
+| `FALLBACK_TEXT` | Tanglish "saw your message, Aswin will reply" | spoken when Claude is unreachable |
+| `REPLY_COOLDOWN_MINUTES` | `0` | `0` replies to every message; `60` behaves like an away message |
+| `ELEVENLABS_MODEL_ID` | `eleven_v3` | expressive, supports tags like `[laughs]`; `eleven_flash_v2_5` is faster and half the credits |
+| `GRAPH_API_VERSION` | `v24.0` | bump occasionally |
 | `PUBLIC_ORIGIN` | the custom domain | where Instagram fetches audio from |
 
 ## Operations
@@ -206,11 +222,37 @@ npm run typecheck
 sh scripts/check.sh http://localhost:8787
 ```
 
+## The reply
+
+`src/prompt.ts` is the persona: warm, casual, matches the friend's language, one or
+two sentences under `MAX_REPLY_CHARS`, no 18+ content, no commitments on the owner's
+behalf, and honest about being a voice assistant if asked directly. Edit it freely; it
+is plain text and a change is a reviewable commit.
+
+The last `12` messages per person are kept in KV for 48 hours so replies follow the
+conversation. If Claude declines a topic, `REFUSAL_TEXT` is spoken instead (a light
+deflection, which is the intended outcome for 18+ content, so no fallback model is
+configured). If Claude is unreachable, `FALLBACK_TEXT` is spoken so the friend still
+hears something.
+
+## The daily budget
+
+`DAILY_CREDIT_LIMIT` is ElevenLabs credits per day in the owner's timezone
+(Asia/Kolkata). `eleven_v3` bills one credit per character, so it is counted as
+characters sent to TTS, in KV under `usage:<date>`. The account's real counter is not
+readable when the API key is scoped to `text_to_speech` only, which is the recommended
+scope.
+
+When the remainder can no longer fit another reply plus the sign-off, `SIGNOFF_TEXT`
+is spoken once ("Seri, enaku konjam work iruku. Naan aprom pesuren!") and the Worker
+stays quiet until the next day. `0` disables the budget. `/health` shows
+`usage_today`.
+
+Two messages arriving in the same second can both read the old counter; the budget
+is a guard rail, not an accounting system.
+
 ## Not here, on purpose
 
-- **Generated replies.** `REPLY_TEXT` is fixed. Sending the incoming text to an LLM
-  and speaking the answer drops into `handleEvent` as one call; it is left out so the
-  first version has nothing to debug but the plumbing.
 - **More than one person.** `ALLOWED_IGSID` is a single id by design. A list is a
   one-line change if you want it.
 - **Other channels.** The same TTS and WAV code would serve a WhatsApp Cloud API

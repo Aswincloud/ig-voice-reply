@@ -3,6 +3,7 @@
   "name": "ig-voice-reply",
   "main": "src/worker.ts",
   "compatibility_date": "2026-07-01",
+  "compatibility_flags": ["nodejs_compat"],
 
   // AswinCloud account — the one that owns the aswincloud.com zone.
   "account_id": "e38978124c8fdb38dc80c04cda318ab3",
@@ -26,10 +27,21 @@
   "vars": {
     "PUBLIC_ORIGIN": "https://ig-reply.aswincloud.com",
     "GRAPH_API_VERSION": "v24.0",
-    "ELEVENLABS_MODEL_ID": "eleven_flash_v2_5",
-    "REPLY_TEXT": "Hey! Got your message. I'll get back to you properly soon.",
-    // 0 = reply to every message (useful while testing). Set to e.g. 60 so one
-    // voice note per hour behaves like an away message.
-    "REPLY_COOLDOWN_MINUTES": "0"
+    // eleven_v3: most expressive, supports audio tags like [laughs]; 1 credit/character.
+    "ELEVENLABS_MODEL_ID": "eleven_v3",
+    // 0 = reply to every message. Set to e.g. 60 for one reply per hour.
+    "REPLY_COOLDOWN_MINUTES": "0",
+    // Reply generation. The persona lives in src/prompt.ts.
+    "ANTHROPIC_MODEL": "claude-opus-5",
+    "MAX_REPLY_CHARS": "160",
+    // ElevenLabs credits per day (owner's day, Asia/Kolkata). Counted as characters
+    // sent to TTS. When the remainder is too small for another reply, SIGNOFF_TEXT
+    // is spoken once and the Worker stays quiet until the next day. 0 disables.
+    "DAILY_CREDIT_LIMIT": "1000",
+    "SIGNOFF_TEXT": "Seri, enaku konjam work iruku. Naan aprom pesuren!",
+    // Spoken when Claude declines the topic (18+ etc.) — a light deflection.
+    "REFUSAL_TEXT": "Aiyo, adhu pathi vendam da. Vera edhavadhu solu!",
+    // Spoken when Claude is unavailable, so the friend still hears something.
+    "FALLBACK_TEXT": "Hey, message paathen. Aswin konja neram la reply pannuvaan."
   }
 }

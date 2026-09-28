@@ -16,5 +16,8 @@
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "wrangler": "^4.103.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0"
   }
 }
