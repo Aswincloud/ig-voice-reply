@@ -243,7 +243,7 @@ Non-secret settings live in `wrangler.jsonc` under `vars`.
 | `REFUSAL_TEXT` | Tamil "let's not talk about that" | spoken when Claude declines |
 | `FALLBACK_TEXT` | Tamil "saw your message, Aswin will reply" | spoken when Claude is unreachable |
 | `REPLY_COOLDOWN_MINUTES` | `0` | `0` replies to every message; `60` behaves like an away message |
-| `ELEVENLABS_MODEL_ID` | `eleven_v3` | expressive, supports tags like `[laughs]`; `eleven_flash_v2_5` is faster and half the credits |
+| `ELEVENLABS_MODEL_ID` | `eleven_v4` | most expressive, follows tags like `[laughs]`; `eleven_v4_turbo` is the low-latency variant |
 | `GRAPH_API_VERSION` | `v24.0` | bump occasionally |
 | `PUBLIC_ORIGIN` | the custom domain | where Instagram fetches audio from |
 | `CHATWOOT_BASE_URL` | `https://app.chatwoot.com` | Chatwoot route: the Chatwoot installation |
