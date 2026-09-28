@@ -31,6 +31,12 @@ Everyone else who messages you is ignored and, once configured, never logged.
   needs only Standard Access: **no App Review**.
 - **Echoes are dropped.** The webhook fires for messages *you* send too, including
   ones typed in the Instagram app. Replying to those loops forever.
+- **A Page token, so nothing expires.** Sends go through the Facebook Page linked
+  to the Instagram account, using a Page access token. Derived from a long-lived
+  user token, that token has no expiry, so there is no refresh code and no cron.
+  `/health` checks it is still valid with a live call, because it *can* be
+  invalidated: resetting the app secret, removing the app from the Page, or a
+  password change on the granting Facebook account all do it, silently.
 
 ## Setup
 
@@ -40,28 +46,69 @@ Create an API key at <https://elevenlabs.io/app/settings/api-keys> and pick a vo
 id. To reply in your own voice, Instant Voice Clone on the Starter plan needs about a
 minute of clean audio.
 
-### 2. Meta developer app
+### 2. Meta developer app and the Page token
 
 This is most of the work, and it is why every tool in this space is under-documented.
+You need a Meta app with the Instagram product, a Facebook Page linked to the
+Instagram account, and a **Page access token** minted with the right scopes.
 
-1. <https://developers.facebook.com/apps> → **Create App**. When asked for a use case
-   or product, add **Instagram** and choose **"API setup with Instagram login"**. This
-   path does not need a Facebook Page.
-2. In the Instagram product, step **Generate access tokens**: add your Instagram
-   professional account and generate a token. Copy the **token** and the **Instagram
-   user id** shown beside it. The token is long-lived (60 days); the Worker refreshes it.
-3. Step **Configure webhooks**:
-   - Callback URL: `https://ig-reply.aswincloud.com/webhook`
-   - Verify token: any string you invent. You will set the same value as
-     `WEBHOOK_VERIFY_TOKEN`.
-   - Subscribe to the **`messages`** field.
-   The verify handshake will only succeed after the Worker is deployed with that secret.
-4. **App settings → Basic → App Secret.** This signs every webhook delivery.
-5. In the **Instagram app on your phone**: Settings → Messages and story replies →
-   Message controls → **Connected tools** must be on. Without it Meta never sends the
-   webhook and nothing in the logs explains why.
+**2a. App.** <https://developers.facebook.com/apps> → your app (or Create App) →
+add the **Instagram** product. **App settings → Basic → App Secret** is
+`META_APP_SECRET`. Leave the app in Development mode; for your own account that is
+sufficient and needs no App Review.
 
-Leave the app in **Development mode**. For your own account that is sufficient.
+**2b. Link.** The Instagram professional account must be linked to a Facebook Page
+(Instagram app → Settings → Accounts Center, or Page settings → Linked accounts).
+
+**2c. User token, in Graph API Explorer** (<https://developers.facebook.com/tools/explorer/>):
+- **Meta App** → your app. **User or Page** → Get User Access Token.
+- **Permissions**: add all five. The last two are the ones people miss, and the Page
+  subscription in 2e fails without them:
+  ```
+  instagram_basic   instagram_manage_messages
+  pages_show_list   pages_messaging   pages_manage_metadata
+  ```
+- **Generate Access Token**. In the popup, on the *Pages* screen tick the linked
+  Page, and on the *Instagram* screen tick the account. If the Page is not offered,
+  your Facebook account has no admin role on it; fix that in the Page's settings.
+
+The result is a user token valid for about an hour.
+
+**2d. Exchange, then ask the Page for its token.** Only a Page token derived from a
+*long-lived* user token is permanent, so exchange first:
+
+```sh
+LONG=$(curl -sg "https://graph.facebook.com/v24.0/oauth/access_token?grant_type=fb_exchange_token&client_id=APP_ID&client_secret=APP_SECRET&fb_exchange_token=SHORT_TOKEN" | python3 -c 'import json,sys;print(json.load(sys.stdin)["access_token"])')
+curl -sg "https://graph.facebook.com/v24.0/PAGE_ID?fields=access_token&access_token=$LONG"
+```
+
+Ask the **Page directly** rather than `/me/accounts`: that listing omits Pages held
+through a business portfolio even when they are in the grant. Confirm it is permanent
+with `debug_token`; `"expires_at": 0` means never.
+
+Ids you need: the Page id is in its URL or `GET /me/accounts`; the Instagram account
+id (a `17841…` number) is `GET /PAGE_ID?fields=instagram_business_account`.
+
+**2e. Webhooks.** Two subscriptions, both by API.
+
+App level, with an app token (`APP_ID|APP_SECRET`):
+```sh
+curl -X POST "https://graph.facebook.com/v24.0/APP_ID/subscriptions" \
+  -d object=instagram -d fields=messages \
+  -d callback_url=https://ig-reply.aswincloud.com/webhook \
+  -d verify_token=YOUR_WEBHOOK_VERIFY_TOKEN -d "access_token=APP_ID|APP_SECRET"
+```
+Meta fetches `/webhook` to verify, so the Worker must be deployed with
+`WEBHOOK_VERIFY_TOKEN` first.
+
+Page level, with the Page token, which is what actually routes the account's DMs:
+```sh
+curl -X POST "https://graph.facebook.com/v24.0/PAGE_ID/subscribed_apps?subscribed_fields=messages&access_token=PAGE_TOKEN"
+```
+
+**2f. Instagram phone app** → Settings → Messages and story replies → Message
+controls → **Connected tools** on. Without it Meta never sends the webhook and
+nothing in the logs explains why.
 
 ### 3. Deploy
 
@@ -76,12 +123,13 @@ npx wrangler secret put ELEVENLABS_API_KEY
 npx wrangler secret put ELEVENLABS_VOICE_ID
 npx wrangler secret put META_APP_SECRET
 npx wrangler secret put WEBHOOK_VERIFY_TOKEN
-npx wrangler secret put IG_ACCESS_TOKEN
+npx wrangler secret put IG_ACCESS_TOKEN     # the Page token
+npx wrangler secret put IG_PAGE_ID
 npx wrangler secret put IG_USER_ID
 ```
 
-Now complete the webhook verification on Meta's side (step 2.3). `GET /health` should
-report `configured.meta: true` and `configured.elevenlabs: true`.
+Now create the two webhook subscriptions (step 2e). `GET /health` should report
+`configured.meta: true`, `configured.elevenlabs: true` and `token.valid: true`.
 
 ### 4. Find the person's IGSID
 
@@ -121,16 +169,15 @@ Non-secret settings live in `wrangler.jsonc` under `vars`.
 
 ## Operations
 
-**`GET /health`** returns JSON: which secret groups are configured, where the live
-token comes from, and how many days it has left. It answers `503` when anything is
-unconfigured or the token has under 3 days left, so a status page can watch it.
+**`GET /health`** returns JSON: which secret groups are configured and whether the
+Page token still works. It answers `503` when anything is unconfigured or the token
+is invalid, so a status page can watch it.
 
-**Token refresh.** Worker secrets cannot be changed at runtime, so `IG_ACCESS_TOKEN`
-is only the bootstrap. A daily cron refreshes the token when under 10 days remain and
-stores the new one in KV, which the Worker prefers over the secret from then on. The
-first cron run after you set the secret refreshes immediately to learn the real expiry.
-Meta refuses to refresh a token younger than 24 hours; that shows in the logs as
-`refresh failed` and is harmless.
+**Token validity.** The Page token does not expire, but it can be invalidated
+(see "Why it is shaped this way"). `/health` makes a live call to Meta to check it,
+cached for five minutes in KV, and reports `token.valid` with a `note` carrying
+Meta's error when it is false. If it goes false, repeat 2c and 2d and
+`wrangler secret put IG_ACCESS_TOKEN` again.
 
 **Logs.** `npm run tail`. Errors from ElevenLabs and the Graph API are logged with the
 first 300 characters of the response body, which is where Meta puts the useful part.
@@ -140,9 +187,10 @@ first 300 characters of the response body, which is where Meta puts the useful p
 | symptom | cause |
 |---|---|
 | webhook verification fails on Meta's side | Worker not deployed yet, or `WEBHOOK_VERIFY_TOKEN` differs from what you typed at Meta |
-| no webhook arrives at all | **Connected tools** is off in the Instagram app (step 2.5); or the app lacks the `messages` subscription; or the message is from your own account (echo) |
+| no webhook arrives at all | **Connected tools** is off (2f); or the Page is not subscribed (2e, second call); or the message is from your own account (echo) |
 | `graph send 400` mentioning the attachment | Instagram could not fetch the audio. Check `PUBLIC_ORIGIN` is reachable and returns `audio/wav` |
-| `graph send 190` | token expired or revoked. Check `/health`, regenerate at Meta, `wrangler secret put IG_ACCESS_TOKEN`, and clear `token:ig` from KV |
+| `graph send 190`, or `/health` shows `token.valid: false` | token invalidated. Repeat 2c and 2d, then `wrangler secret put IG_ACCESS_TOKEN` |
+| `(#200) … pages_messaging` or `pages_manage_metadata` when subscribing the Page | those two scopes were not in the Explorer grant. Repeat 2c with all five, then 2d and 2e |
 | voice note arrives but is silent or very short | `REPLY_TEXT` empty, or ElevenLabs returned an error body that was stored as audio. Check the tail for `elevenlabs 4xx` |
 | replies twice | cooldown is `0` and the person sent two messages. Set `REPLY_COOLDOWN_MINUTES` |
 

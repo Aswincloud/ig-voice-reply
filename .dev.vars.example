@@ -12,10 +12,12 @@ ELEVENLABS_VOICE_ID=
 META_APP_SECRET=
 # A string you invent; paste the same value into the webhook config on Meta's side.
 WEBHOOK_VERIFY_TOKEN=
-# Long-lived token generated in the Instagram product -> API setup. Bootstrap only:
-# once the cron refreshes it, the live token lives in KV.
+# A PAGE access token for the Facebook Page linked to the Instagram account.
+# Derived from a long-lived user token it never expires (README, "Meta setup").
 IG_ACCESS_TOKEN=
-# Your Instagram professional account's ID (shown next to the token, or GET /me).
+# The Facebook Page id. Sends go through the Page: POST /{IG_PAGE_ID}/messages.
+IG_PAGE_ID=
+# The Instagram professional account id (17841...). Webhook entries carry this.
 IG_USER_ID=
 
 # The ONE person to reply to: their Instagram-scoped user ID. Leave unset at first;
