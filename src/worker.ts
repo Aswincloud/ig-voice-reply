@@ -31,7 +31,7 @@ const PCM_RATE = 24000; // must match output_format=pcm_24000 below
 const AUDIO_TTL_S = 300; // Instagram fetches within seconds; 5 min is generous
 const SEEN_TTL_S = 600; // Meta retries a delivery it thinks failed; dedupe on mid
 const TOKEN_CHECK_TTL_S = 300; // /health re-validates the token at most this often
-const VERSION = "0.2.0";
+const VERSION = "0.2.1";
 
 // ---- Meta webhook payload (only the fields used) ----------------------------
 interface MessagingEvent {
@@ -133,10 +133,19 @@ async function processWebhook(body: WebhookBody, env: Env): Promise<void> {
 
 async function handleEvent(evt: MessagingEvent, env: Env): Promise<void> {
   const msg = evt.message;
-  // Reactions, read receipts and postbacks arrive without a message. Echoes are
-  // our own sends (and anything you type in the Instagram app) — replying to
-  // those loops forever.
-  if (!msg || msg.is_echo) return;
+  // Reactions, read receipts and postbacks arrive without a message.
+  if (!msg) return;
+
+  // Echoes are our own sends (and anything you type in the Instagram app);
+  // replying to those loops forever. But in discovery mode they are the easiest
+  // way to learn someone's Instagram-scoped id without asking them to write
+  // first: message them from the app, and the echo names them as recipient.
+  if (msg.is_echo) {
+    if (!env.ALLOWED_IGSID && evt.recipient?.id) {
+      console.log(`discovery (echo): you sent a message to recipient id ${evt.recipient.id} (set ALLOWED_IGSID to reply to them)`);
+    }
+    return;
+  }
   const from = evt.sender?.id;
   if (!from) return;
 

@@ -135,7 +135,9 @@ Now create the two webhook subscriptions (step 2e). `GET /health` should report
 
 Instagram-scoped user ids are per (person, your account) and are not visible in the
 app. Until `ALLOWED_IGSID` is set the Worker is in **discovery mode**: it logs the
-sender id of each incoming message and does nothing else.
+sender id of each incoming message, and the recipient id of each message *you*
+send, and does nothing else. So you can learn someone's id either by having them
+message you, or by messaging them from the Instagram app yourself.
 
 ```sh
 npm run tail
