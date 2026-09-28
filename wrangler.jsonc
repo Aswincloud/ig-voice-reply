@@ -28,20 +28,22 @@
     "PUBLIC_ORIGIN": "https://ig-reply.aswincloud.com",
     "GRAPH_API_VERSION": "v24.0",
     // eleven_v3: most expressive, supports audio tags like [laughs]; 1 credit/character.
+    // Replies are Tamil script (see src/prompt.ts), which v3 pronounces as Tamil;
+    // Latin-letter Tanglish is read as English and sounds wrong.
     "ELEVENLABS_MODEL_ID": "eleven_v3",
     // 0 = reply to every message. Set to e.g. 60 for one reply per hour.
     "REPLY_COOLDOWN_MINUTES": "0",
     // Reply generation. The persona lives in src/prompt.ts.
     "ANTHROPIC_MODEL": "claude-opus-5",
-    "MAX_REPLY_CHARS": "160",
+    "MAX_REPLY_CHARS": "180",
     // ElevenLabs credits per day (owner's day, Asia/Kolkata). Counted as characters
     // sent to TTS. When the remainder is too small for another reply, SIGNOFF_TEXT
     // is spoken once and the Worker stays quiet until the next day. 0 disables.
     "DAILY_CREDIT_LIMIT": "1000",
-    "SIGNOFF_TEXT": "Seri, enaku konjam work iruku. Naan aprom pesuren!",
+    "SIGNOFF_TEXT": "சரி, எனக்கு கொஞ்சம் வேலை இருக்கு. நான் அப்புறம் பேசுறேன்!",
     // Spoken when Claude declines the topic (18+ etc.) — a light deflection.
-    "REFUSAL_TEXT": "Aiyo, adhu pathi vendam da. Vera edhavadhu solu!",
+    "REFUSAL_TEXT": "ஐயோ, அதைப் பற்றி வேணாம் டா. வேற எதாவது சொல்லு!",
     // Spoken when Claude is unavailable, so the friend still hears something.
-    "FALLBACK_TEXT": "Hey, message paathen. Aswin konja neram la reply pannuvaan."
+    "FALLBACK_TEXT": "ஹே, மெசேஜ் பார்த்தேன். அஸ்வின் கொஞ்ச நேரத்துல ரிப்ளை பண்ணுவான்."
   }
 }

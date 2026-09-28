@@ -1,8 +1,8 @@
 # ig-voice-reply
 
 Replies to Instagram DMs from **one allowlisted person** with a voice note: Claude
-writes a short, friendly line in the friend's own language (Tamil-in-Latin-script or
-English), ElevenLabs speaks it. A daily credit budget caps the spend and signs off
+writes a short, friendly line in spoken Tamil, in Tamil script, whatever language the
+friend used; ElevenLabs speaks it. A daily credit budget caps the spend and signs off
 politely when it's nearly used. Runs entirely on Cloudflare Workers; no server, no
 ffmpeg.
 
@@ -175,11 +175,11 @@ Non-secret settings live in `wrangler.jsonc` under `vars`.
 | var | default | meaning |
 |---|---|---|
 | `ANTHROPIC_MODEL` | `claude-opus-5` | writes the reply |
-| `MAX_REPLY_CHARS` | `160` | hard cap on a spoken reply; trimmed at a sentence end |
+| `MAX_REPLY_CHARS` | `180` | hard cap on a spoken reply; trimmed at a sentence end |
 | `DAILY_CREDIT_LIMIT` | `1000` | ElevenLabs credits per IST day; `0` disables |
-| `SIGNOFF_TEXT` | Tanglish "I have some work, talk later" | spoken once when the budget is nearly gone |
-| `REFUSAL_TEXT` | Tanglish "let's not talk about that" | spoken when Claude declines |
-| `FALLBACK_TEXT` | Tanglish "saw your message, Aswin will reply" | spoken when Claude is unreachable |
+| `SIGNOFF_TEXT` | Tamil "I have some work, talk later" | spoken once when the budget is nearly gone |
+| `REFUSAL_TEXT` | Tamil "let's not talk about that" | spoken when Claude declines |
+| `FALLBACK_TEXT` | Tamil "saw your message, Aswin will reply" | spoken when Claude is unreachable |
 | `REPLY_COOLDOWN_MINUTES` | `0` | `0` replies to every message; `60` behaves like an away message |
 | `ELEVENLABS_MODEL_ID` | `eleven_v3` | expressive, supports tags like `[laughs]`; `eleven_flash_v2_5` is faster and half the credits |
 | `GRAPH_API_VERSION` | `v24.0` | bump occasionally |
@@ -224,8 +224,9 @@ sh scripts/check.sh http://localhost:8787
 
 ## The reply
 
-`src/prompt.ts` is the persona: warm, casual, matches the friend's language, one or
-two sentences under `MAX_REPLY_CHARS`, no 18+ content, no commitments on the owner's
+`src/prompt.ts` is the persona: warm, casual, always spoken Tamil in Tamil script
+(Tanglish in Latin letters is pronounced like English by the TTS, Tamil script is
+pronounced as Tamil), one or two sentences under `MAX_REPLY_CHARS`, no 18+ content, no commitments on the owner's
 behalf, and honest about being a voice assistant if asked directly. Edit it freely; it
 is plain text and a change is a reviewable commit.
 
