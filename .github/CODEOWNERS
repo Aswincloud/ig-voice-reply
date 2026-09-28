@@ -1,0 +1,5 @@
+# Code Owners — Aswincloud
+# Human owners: @Aswincloud/admins. codeowners-bypass is the auto-approve bot's
+# team, whose approval satisfies the required code-owner review.
+* @Aswin-coder @Aswinmcw @Aswincloud/admins @Aswincloud/codeowners-bypass
+/.github/ @Aswin-coder @Aswinmcw @Aswincloud/admins @Aswincloud/codeowners-bypass
