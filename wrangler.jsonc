@@ -1,0 +1,40 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ig-voice-reply",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-07-01",
+
+  // AswinCloud account — the one that owns the aswincloud.com zone.
+  "account_id": "e38978124c8fdb38dc80c04cda318ab3",
+  "observability": { "enabled": true },
+
+  // custom_domain creates and manages the DNS record itself. Meta needs a public
+  // HTTPS callback for the webhook, and Instagram fetches each voice note from
+  // this origin, so the Worker must be reachable on the open internet.
+  "routes": [{ "pattern": "ig-reply.aswincloud.com", "custom_domain": true }],
+
+  // One namespace, key-prefixed:
+  //   audio:<uuid>        the WAV Instagram fetches, TTL 5 min
+  //   seen:<mid>          webhook dedupe, TTL 10 min
+  //   last_reply:<igsid>  cooldown timestamp
+  //   token:ig            refreshed access token (the secret is only the bootstrap)
+  //   token:ig:expires_at
+  "kv_namespaces": [{ "binding": "KV", "id": "a12760194cd24c1796d1c8379a79b6ae" }],
+
+  // Daily token check. Long-lived Instagram tokens last 60 days and can be
+  // refreshed once they are 24h old; the cron refreshes when < 10 days remain
+  // and /health turns 503 when < 3 remain, so a stuck refresh is visible.
+  "triggers": { "crons": ["17 3 * * *"] },
+
+  // Non-secret configuration. Secrets are set with `wrangler secret put` and
+  // listed in .dev.vars.example — never here.
+  "vars": {
+    "PUBLIC_ORIGIN": "https://ig-reply.aswincloud.com",
+    "GRAPH_API_VERSION": "v24.0",
+    "ELEVENLABS_MODEL_ID": "eleven_flash_v2_5",
+    "REPLY_TEXT": "Hey! Got your message. I'll get back to you properly soon.",
+    // 0 = reply to every message (useful while testing). Set to e.g. 60 so one
+    // voice note per hour behaves like an away message.
+    "REPLY_COOLDOWN_MINUTES": "0"
+  }
+}

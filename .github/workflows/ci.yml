@@ -1,0 +1,44 @@
+name: CI
+
+# Pull requests, pushes to main, and the merge queue. Everything here is offline:
+# no secrets, no Cloudflare token, no Meta or ElevenLabs calls.
+#
+# merge_group is required: the org merge queue builds on a gh-readonly-queue/main/*
+# branch and waits for these checks there. Without the trigger nothing runs and
+# the PR is evicted after 60 minutes. The concurrency group includes the event
+# name because push and merge_group both fire for a queue branch, and a ref-only
+# group makes the second cancel the first — which was the one the queue needed.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Typecheck
+        run: npm run typecheck
+      # The WAV header and the webhook signature check are the two things that
+      # fail silently in production if wrong: a bad header is a voice note that
+      # will not play, a bad verifier is either an open endpoint or a dead one.
+      - name: Unit tests
+        run: npm test
+      - name: Build (dry run)
+        run: npx wrangler deploy --dry-run --outdir /tmp/dryrun
