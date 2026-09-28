@@ -29,3 +29,17 @@ IG_USER_ID=
 # The ONE person to reply to: their Instagram-scoped user ID. Leave unset at first;
 # the Worker logs the sender ID of incoming messages until this is configured.
 ALLOWED_IGSID=
+
+# Chatwoot route — reaches people who hold no role on the Meta app (README).
+# Profile Settings -> Access Token, for the agent the replies should appear from.
+CHATWOOT_API_TOKEN=
+# Invent an unguessable string (e.g. `openssl rand -hex 24`). The webhook URL you
+# give Chatwoot is https://<PUBLIC_ORIGIN>/chatwoot/<this value>.
+CHATWOOT_WEBHOOK_TOKEN=
+# Optional: if the Chatwoot webhook offers a signing secret, put it here too and
+# every delivery must carry a valid X-Chatwoot-Signature.
+CHATWOOT_WEBHOOK_SECRET=
+# The ONE person to reply to on this route: their Instagram username (with or
+# without @) or their Chatwoot contact id. Leave unset at first; the Worker logs
+# each incoming sender until this is configured.
+CHATWOOT_ALLOWED_CONTACT=

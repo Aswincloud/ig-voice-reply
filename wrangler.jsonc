@@ -21,6 +21,10 @@
   //   health:token        cached result of the live token check, TTL 5 min
   //   echo:last           most recent recipient of a message the owner sent, TTL 7 days
   //   discovery:last      most recent inbound sender while unallowlisted, TTL 7 days
+  //   discovery:chatwoot  same, for the Chatwoot route (contact id, username, igsid), TTL 7 days
+  //   seen:cw:<id>        Chatwoot webhook dedupe, TTL 10 min
+  //   history:cw:<id>     conversation context for a Chatwoot contact, TTL 48 h
+  //   health:chatwoot     cached result of the Chatwoot token check, TTL 5 min
   "kv_namespaces": [{ "binding": "KV", "id": "a12760194cd24c1796d1c8379a79b6ae" }],
 
 
@@ -46,6 +50,12 @@
     // Spoken when Claude declines the topic (18+ etc.) — a light deflection.
     "REFUSAL_TEXT": "ஐயோ, அதைப் பற்றி வேணாம் டா. வேற எதாவது சொல்லு!",
     // Spoken when Claude is unavailable, so the friend still hears something.
-    "FALLBACK_TEXT": "ஹே, மெசேஜ் பார்த்தேன். அஸ்வின் கொஞ்ச நேரத்துல ரிப்ளை பண்ணுவான்."
+    "FALLBACK_TEXT": "ஹே, மெசேஜ் பார்த்தேன். அஸ்வின் கொஞ்ச நேரத்துல ரிப்ளை பண்ணுவான்.",
+    // Chatwoot route (README, "Reaching people who hold no role on the Meta app").
+    // The account id is the number in the Chatwoot URL: /app/accounts/<id>/...
+    // CHATWOOT_INBOX_ID narrows to one inbox; empty acts on every inbox in the account.
+    "CHATWOOT_BASE_URL": "https://app.chatwoot.com",
+    "CHATWOOT_ACCOUNT_ID": "",
+    "CHATWOOT_INBOX_ID": ""
   }
 }

@@ -40,6 +40,14 @@ else
     "$BASE/webhook?hub.mode=subscribe&hub.verify_token=definitely-wrong&hub.challenge=x"
   expect 503 "webhook POST is not-configured, not accepted" -X POST -H 'content-type: application/json' -d '{}' "$BASE/webhook"
 fi
+if printf '%s' "$health" | grep -q '"chatwoot_webhook": *true'; then
+  echo "  (chatwoot webhook token present: a wrong path token must be a plain 404)"
+  expect 404 "chatwoot webhook with wrong path token is 404" -X POST -H 'content-type: application/json' -d '{}' "$BASE/chatwoot/definitely-wrong"
+else
+  echo "  (chatwoot webhook token absent: the path must say 503 not-configured, never 200)"
+  expect 503 "chatwoot webhook is not-configured, not accepted" -X POST -H 'content-type: application/json' -d '{}' "$BASE/chatwoot/definitely-wrong"
+fi
+expect 404 "chatwoot path does not answer GET" "$BASE/chatwoot/definitely-wrong"
 expect 404 "unknown audio key is 404, not 500" "$BASE/audio/00000000-0000-0000-0000-000000000000"
 expect 404 "audio key with bad shape is 404" "$BASE/audio/../etc/passwd"
 expect 404 "unknown path" "$BASE/nope"

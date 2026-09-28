@@ -170,6 +170,66 @@ thread, from you. `npm run tail` shows `replied to … with N bytes of audio`.
 unsigned and wrongly signed webhook posts are refused and that nothing unexpected is
 served.
 
+## Reaching people who hold no role on the Meta app (Chatwoot route)
+
+A Meta app on **Standard Access** receives Instagram messages only from accounts
+that hold a role on the app (admin, developer, tester). Everyone else's DMs are
+never delivered, so the Meta route above reaches your own accounts and nobody
+else, until App Review grants Advanced Access.
+
+Chatwoot Cloud already holds that access: it connects your Instagram account
+through Chatwoot's own reviewed Meta app, receives everyone's messages, and its
+API can reply to anyone. So the Worker has a second door. Chatwoot sends each new
+message to `POST /chatwoot/<token>`; the Worker runs the same pipeline (Claude,
+ElevenLabs, WAV) and posts the audio to the conversation through Chatwoot's API;
+Chatwoot stores the file and relays it to Instagram as a voice note. Nothing
+about the Meta app changes, and nobody has to accept an invitation.
+
+```
+Instagram ──> Chatwoot Cloud ──webhook──> Worker ──> Claude ──> ElevenLabs
+Instagram <── Chatwoot Cloud <──API (audio/wav)── Worker
+```
+
+### Setup
+
+1. In Chatwoot Cloud, add an **Instagram** inbox and connect the account
+   (Settings → Inboxes → Add Inbox → Instagram). Send it a DM from any account
+   and confirm the conversation shows up. If it does, the access problem is over.
+2. An API token for the agent the replies should come from: Profile Settings →
+   Access Token. `npx wrangler secret put CHATWOOT_API_TOKEN`.
+3. An unguessable path token: `openssl rand -hex 24 | npx wrangler secret put CHATWOOT_WEBHOOK_TOKEN`.
+   Chatwoot does not authenticate webhook calls unless the webhook has a
+   signing secret, so the URL itself is the credential. A wrong token answers
+   `404`, indistinguishable from a path that does not exist.
+4. Settings → Integrations → Webhooks → Add: URL
+   `https://ig-reply.aswincloud.com/chatwoot/<CHATWOOT_WEBHOOK_TOKEN>`,
+   event **Message created**. If the webhook shows a signing secret, also
+   `wrangler secret put CHATWOOT_WEBHOOK_SECRET` and every delivery must carry a
+   valid `X-Chatwoot-Signature` (HMAC-SHA256 over `"<timestamp>.<body>"`,
+   timestamp within five minutes).
+5. Set `CHATWOOT_ACCOUNT_ID` (the number in the Chatwoot URL) and, to be
+   explicit, `CHATWOOT_INBOX_ID` in `wrangler.jsonc`.
+6. The one person: `npx wrangler secret put CHATWOOT_ALLOWED_CONTACT` with their
+   **Instagram username** (with or without `@`) or their Chatwoot contact id.
+   Chatwoot records the username on the contact, so no discovery step is needed.
+   Until it is set the route is in discovery mode and logs
+   `discovery (chatwoot): message from contact 12 @name "Name" igsid 1784…` for
+   each sender (also kept in KV as `discovery:chatwoot`).
+
+### What it looks like from Chatwoot
+
+Each reply appears in the conversation as an outgoing voice message from the
+token's agent, followed by a **private note** with the spoken text, so the thread
+reads back without playing the audio. Private notes never reach Instagram.
+Anything you type in Chatwoot, or in the Instagram app, arrives at the Worker as
+an outgoing message and is ignored, so there is no echo loop to guard against.
+
+Both routes share the history, cooldown and daily budget code, but keep separate
+history per person (`history:<igsid>` and `history:cw:<contact id>`).
+
+`/health` reports `routes.chatwoot: "replying"` when the token, API access,
+allowlist and a live token check all pass, and `chatwoot_token` mirrors `token`.
+
 ## Configuration
 
 Non-secret settings live in `wrangler.jsonc` under `vars`.
@@ -186,6 +246,9 @@ Non-secret settings live in `wrangler.jsonc` under `vars`.
 | `ELEVENLABS_MODEL_ID` | `eleven_v3` | expressive, supports tags like `[laughs]`; `eleven_flash_v2_5` is faster and half the credits |
 | `GRAPH_API_VERSION` | `v24.0` | bump occasionally |
 | `PUBLIC_ORIGIN` | the custom domain | where Instagram fetches audio from |
+| `CHATWOOT_BASE_URL` | `https://app.chatwoot.com` | Chatwoot route: the Chatwoot installation |
+| `CHATWOOT_ACCOUNT_ID` | empty | Chatwoot route: the account whose inbox is connected |
+| `CHATWOOT_INBOX_ID` | empty | Chatwoot route: act on this inbox only; empty means every inbox |
 
 ## Operations
 
