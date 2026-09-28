@@ -41,7 +41,7 @@ const PCM_RATE = 24000; // must match output_format=pcm_24000 below
 const AUDIO_TTL_S = 300; // Instagram fetches within seconds; 5 min is generous
 const SEEN_TTL_S = 600; // Meta retries a delivery it thinks failed; dedupe on mid
 const TOKEN_CHECK_TTL_S = 300; // /health re-validates the token at most this often
-const VERSION = "0.3.5";
+const VERSION = "0.3.6";
 const HISTORY_TURNS = 12; // messages kept per person for context
 const HISTORY_TTL_S = 48 * 3600;
 const USAGE_TTL_S = 2 * 86400;
@@ -167,6 +167,9 @@ async function handleEvent(evt: MessagingEvent, env: Env): Promise<void> {
     const to = evt.recipient?.id;
     if (to && to !== env.ALLOWED_IGSID) {
       console.log(`echo: you sent a message to recipient id ${to}${env.ALLOWED_IGSID ? "" : " (set ALLOWED_IGSID to reply to them)"}`);
+      // Also keep it, so the id can be read back later (`wrangler kv key get echo:last`)
+      // instead of having to be watching the log at the moment the echo arrives.
+      await env.KV.put("echo:last", JSON.stringify({ recipient: to, at: new Date().toISOString() }), { expirationTtl: 7 * 86400 });
     }
     return;
   }

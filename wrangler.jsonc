@@ -19,6 +19,7 @@
   //   seen:<mid>          webhook dedupe, TTL 10 min
   //   last_reply:<igsid>  cooldown timestamp
   //   health:token        cached result of the live token check, TTL 5 min
+  //   echo:last           most recent recipient of a message the owner sent, TTL 7 days
   "kv_namespaces": [{ "binding": "KV", "id": "a12760194cd24c1796d1c8379a79b6ae" }],
 
 
