@@ -41,7 +41,7 @@ const PCM_RATE = 24000; // must match output_format=pcm_24000 below
 const AUDIO_TTL_S = 300; // Instagram fetches within seconds; 5 min is generous
 const SEEN_TTL_S = 600; // Meta retries a delivery it thinks failed; dedupe on mid
 const TOKEN_CHECK_TTL_S = 300; // /health re-validates the token at most this often
-const VERSION = "0.3.6";
+const VERSION = "0.3.7";
 const HISTORY_TURNS = 12; // messages kept per person for context
 const HISTORY_TTL_S = 48 * 3600;
 const USAGE_TTL_S = 2 * 86400;
@@ -179,7 +179,11 @@ async function handleEvent(evt: MessagingEvent, env: Env): Promise<void> {
   // Discovery mode: until the allowlist is set, say who is writing and stop. This
   // is how you find the IGSID to put in ALLOWED_IGSID. Once set, other senders
   // are dropped silently and never logged.
-  if (!env.ALLOWED_IGSID) { console.log(`discovery: message from sender id ${from} (set ALLOWED_IGSID to reply)`); return; }
+  if (!env.ALLOWED_IGSID) {
+    console.log(`discovery: message from sender id ${from} (set ALLOWED_IGSID to reply)`);
+    await env.KV.put("discovery:last", JSON.stringify({ sender: from, at: new Date().toISOString() }), { expirationTtl: 7 * 86400 });
+    return;
+  }
   if (from !== env.ALLOWED_IGSID) return;
 
   if (!env.ELEVENLABS_API_KEY || !env.ELEVENLABS_VOICE_ID || !env.IG_ACCESS_TOKEN || !env.IG_PAGE_ID) {
