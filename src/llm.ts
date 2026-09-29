@@ -21,7 +21,10 @@ export async function generateReply(env: LlmEnv, history: Anthropic.MessageParam
   try {
     const response = await client.messages.create({
       model: env.ANTHROPIC_MODEL,
-      max_tokens: 300, // deliberately short: it is spoken, and it is billed per character downstream
+      // Room for adaptive thinking plus the reply. The spoken text is capped separately
+      // (MAX_REPLY_CHARS), so this ceiling costs nothing downstream. 300 was enough for
+      // Opus 5 but Opus 5.5 thinks longer and got cut off mid-word.
+      max_tokens: 1024,
       output_config: { effort: "low" },
       system: SYSTEM_PROMPT,
       messages: history,
@@ -29,6 +32,9 @@ export async function generateReply(env: LlmEnv, history: Anthropic.MessageParam
     if (response.stop_reason === "refusal") return { text: env.REFUSAL_TEXT, kind: "refusal" };
     let text = response.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join(" ").trim();
     text = text.replace(/\s+/g, " ");
+    // Hit the token ceiling: the last sentence is unfinished. Speak only the complete
+    // ones rather than stopping mid-word.
+    if (response.stop_reason === "max_tokens") text = completeSentences(text);
     if (!text) return { text: env.FALLBACK_TEXT, kind: "fallback" };
     if (text.length > maxChars) text = trimToSentence(text, maxChars);
     return { text, kind: "reply" };
@@ -48,4 +54,10 @@ export function trimToSentence(text: string, max: number): string {
   const slice = text.slice(0, max);
   const end = Math.max(slice.lastIndexOf(". "), slice.lastIndexOf("! "), slice.lastIndexOf("? "), slice.lastIndexOf(".") , slice.lastIndexOf("!"), slice.lastIndexOf("?"));
   return (end > max * 0.4 ? slice.slice(0, end + 1) : slice.replace(/\s+\S*$/, "")).trim();
+}
+
+// Keep everything up to the last sentence end; empty if there is none.
+export function completeSentences(text: string): string {
+  const end = Math.max(text.lastIndexOf("."), text.lastIndexOf("!"), text.lastIndexOf("?"));
+  return end >= 0 ? text.slice(0, end + 1).trim() : "";
 }
