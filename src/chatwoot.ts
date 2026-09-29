@@ -224,7 +224,9 @@ function hexStart(buf: ArrayBuffer): string {
 // the text note) on any failure: expired CDN link, unsupported type, too large.
 export async function fetchImage(a: ChatwootAttachment): Promise<{ media_type: ImageType; data: string } | undefined> {
   try {
-    const res = await fetch(a.data_url!, { redirect: "follow" });
+    // Meta's CDN answers a request without a User-Agent with a redirect to an HTML
+    // page, and Workers' fetch sends none by default.
+    const res = await fetch(a.data_url!, { redirect: "follow", headers: { "user-agent": "Mozilla/5.0 (compatible; ig-voice-reply/1.0; +https://ig-reply.aswincloud.com)" } });
     if (!res.ok) { console.warn(`image fetch ${res.status}`); return undefined; }
     const buf = await res.arrayBuffer();
     if (buf.byteLength > MAX_IMAGE_BYTES) { console.warn(`image too large: ${buf.byteLength} bytes`); return undefined; }
