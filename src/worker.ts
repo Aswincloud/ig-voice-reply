@@ -22,6 +22,7 @@ import { generateReply } from "./llm.ts";
 import {
   type ChatwootEvent, verifyChatwootSignature, safeEqual, isIncomingMessage, contactOf, instagramUsername,
   contactMatches, describeContact, sendChatwootAudio, sendChatwootNote, chatwootTokenCheck,
+  describeIncoming, imagesOf, fetchImage,
 } from "./chatwoot.ts";
 
 interface Env {
@@ -61,7 +62,7 @@ const PCM_RATE = 24000; // must match output_format=pcm_24000 below
 const AUDIO_TTL_S = 300; // Instagram fetches within seconds; 5 min is generous
 const SEEN_TTL_S = 600; // deliveries get retried; dedupe on message id
 const TOKEN_CHECK_TTL_S = 300; // /health re-validates tokens at most this often
-const VERSION = "0.4.7";
+const VERSION = "0.5.0";
 const HISTORY_TURNS = 12; // messages kept per person for context
 const HISTORY_TTL_S = 48 * 3600;
 const USAGE_TTL_S = 2 * 86400;
@@ -270,7 +271,11 @@ async function handleChatwootEvent(evt: ChatwootEvent, env: Env): Promise<void> 
   }
   if (evt.id !== undefined && !(await firstSighting(env, `seen:cw:${evt.id}`))) return;
 
-  const incoming = evt.content?.trim() || (evt.attachments?.length ? "[sent an attachment]" : "[sent a message]");
+  const incoming = describeIncoming(evt);
+  // Photos go to the model as images, so she can react to what is actually in
+  // them. Only for this turn: the stored history keeps the text note instead.
+  const images = (await Promise.all(imagesOf(evt).map(fetchImage))).filter((x) => x !== undefined);
+  if (images.length) console.log(`images: ${images.length} attached for the model`);
   await replyTo(env, { key: `cw:${contact.id}`, label: who }, incoming, async (wav, said) => {
     // Chatwoot stores the file and hands Instagram a URL to it; nothing for us to host.
     await sendChatwootAudio(env, conversationId, wav);
@@ -278,7 +283,7 @@ async function handleChatwootEvent(evt: ChatwootEvent, env: Env): Promise<void> 
     // in Chatwoot. Private, so Instagram never sees it. Not worth failing over.
     try { await sendChatwootNote(env, conversationId, `🔊 ${said}`); }
     catch (e) { console.warn("chatwoot note failed:", (e as Error).message); }
-  });
+  }, images);
 }
 
 // ---- the reply pipeline, shared by both routes -------------------------------
@@ -286,7 +291,9 @@ async function handleChatwootEvent(evt: ChatwootEvent, env: Env): Promise<void> 
 interface Person { key: string; label: string } // key: KV suffix for history/cooldown; label: for logs
 type Deliver = (wav: ArrayBuffer, said: string, kind: string) => Promise<void>;
 
-async function replyTo(env: Env, person: Person, incoming: string, deliver: Deliver): Promise<void> {
+type ImageBlock = { media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string };
+
+async function replyTo(env: Env, person: Person, incoming: string, deliver: Deliver, images: ImageBlock[] = []): Promise<void> {
   const cooldownMin = parseInt(env.REPLY_COOLDOWN_MINUTES || "0", 10);
   const lastKey = `last_reply:${person.key}`;
   if (cooldownMin > 0) {
@@ -312,7 +319,14 @@ async function replyTo(env: Env, person: Person, incoming: string, deliver: Deli
     said = env.SIGNOFF_TEXT; kind = "signoff";
   } else {
     history.push({ role: "user", content: incoming });
-    const r = await generateReply(env, history, Math.min(maxChars, decision.room));
+    // The model sees the photos; the history keeps only the text note.
+    const turn: Anthropic.MessageParam[] = images.length
+      ? [...history.slice(0, -1), { role: "user", content: [
+          ...images.map((img) => ({ type: "image" as const, source: { type: "base64" as const, media_type: img.media_type, data: img.data } })),
+          { type: "text" as const, text: incoming },
+        ] }]
+      : history;
+    const r = await generateReply(env, turn, Math.min(maxChars, decision.room));
     said = r.text; kind = r.kind;
   }
   // Log the line itself. This is a one-owner bot; seeing what it said to the one

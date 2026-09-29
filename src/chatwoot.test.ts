@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
-import { verifyChatwootSignature, safeEqual, isIncomingMessage, contactOf, contactMatches, instagramUsername, audioForm, type ChatwootEvent } from "./chatwoot.ts";
+import { verifyChatwootSignature, safeEqual, isIncomingMessage, contactOf, contactMatches, instagramUsername, audioForm, describeIncoming, imagesOf, type ChatwootEvent } from "./chatwoot.ts";
 
 const secret = "whsec_test";
 const body = JSON.stringify({ event: "message_created", id: 1, content: "hi" });
@@ -86,4 +86,21 @@ test("the multipart body names the file field the way Rails expects", () => {
   assert.equal(file.type, "audio/wav");
   assert.equal((file as File).name, "reply.wav");
   assert.equal(file.size, 4);
+});
+
+test("incoming text describes attachments and keeps what he typed", () => {
+  assert.equal(describeIncoming({ content: "hey" }), "hey");
+  assert.equal(describeIncoming({ content: "", attachments: [{ file_type: "image" }] }), "[sent a photo]");
+  assert.equal(describeIncoming({ content: "idhu paru", attachments: [{ file_type: "image" }] }), "[sent a photo] idhu paru");
+  assert.equal(describeIncoming({ content: null, attachments: [{ file_type: "ig_reel" }] }), "[sent a reel]");
+  assert.equal(describeIncoming({ content: "", attachments: [{ file_type: "audio" }] }), "[sent a voice message]");
+  assert.equal(describeIncoming({ content: "", attachments: [{ file_type: "mystery" }] }), "[sent an attachment]");
+  assert.equal(describeIncoming({}), "[sent a message]");
+});
+
+test("only photos with a URL are passed to the model, at most three", () => {
+  const img = { file_type: "image", data_url: "https://x/y.jpg" };
+  assert.equal(imagesOf({ attachments: [img, { file_type: "audio", data_url: "https://x/a" }, { file_type: "image" }] }).length, 1);
+  assert.equal(imagesOf({ attachments: [img, img, img, img] }).length, 3);
+  assert.equal(imagesOf({}).length, 0);
 });
