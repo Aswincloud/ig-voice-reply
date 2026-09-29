@@ -19,6 +19,12 @@ export interface ChatwootContact {
     [k: string]: unknown;
   } | null;
 }
+export interface ChatwootAttachment {
+  file_type?: string; // image | audio | video | file | ig_reel | ig_post | ig_story | story_mention | share | ...
+  content_type?: string;
+  data_url?: string; // for Instagram: Meta's signed CDN URL, fetchable without auth
+  file_size?: number;
+}
 export interface ChatwootEvent {
   event?: string;
   id?: number;
@@ -26,7 +32,7 @@ export interface ChatwootEvent {
   message_type?: string | number; // "incoming" | "outgoing" | "template" (0 | 1 | 2 in older payloads)
   private?: boolean;
   content_type?: string;
-  attachments?: { file_type?: string }[];
+  attachments?: ChatwootAttachment[];
   sender?: ChatwootContact;
   conversation?: {
     id?: number;
@@ -168,5 +174,56 @@ export async function chatwootTokenCheck(env: ChatwootEnv): Promise<{ valid: boo
     return res.ok ? { valid: true } : { valid: false, note: `${res.status} ${(await res.text()).slice(0, 200)}` };
   } catch (e) {
     return { valid: false, note: (e as Error).message };
+  }
+}
+
+// ---- attachments ---------------------------------------------------------------
+
+// What to tell the model an attachment was, when it cannot see it.
+const ATTACHMENT_WORDS: Record<string, string> = {
+  image: "a photo", audio: "a voice message", video: "a video", file: "a file",
+  ig_reel: "a reel", ig_post: "a post", share: "a post", ig_story: "a story", story_mention: "a story mention",
+  location: "a location", contact: "a contact",
+};
+
+// The text half of an incoming message: what he typed, plus a note for each
+// attachment. Photos are also sent to the model as images (imagesOf); the note is
+// what stays in the stored history, so memory never carries image data.
+export function describeIncoming(evt: ChatwootEvent): string {
+  const typed = evt.content?.trim() ?? "";
+  const notes = (evt.attachments ?? []).map((a) => `[sent ${ATTACHMENT_WORDS[a.file_type ?? ""] ?? "an attachment"}]`);
+  const text = [...notes, typed].filter(Boolean).join(" ");
+  return text || "[sent a message]";
+}
+
+export const IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
+export type ImageType = (typeof IMAGE_TYPES)[number];
+// Claude accepts up to 5 MB of base64 per image; base64 is 4/3 of the raw size.
+export const MAX_IMAGE_BYTES = Math.floor((5 * 1024 * 1024 * 3) / 4);
+const MAX_IMAGES = 3;
+
+export function imagesOf(evt: ChatwootEvent): ChatwootAttachment[] {
+  return (evt.attachments ?? []).filter((a) => a.file_type === "image" && !!a.data_url).slice(0, MAX_IMAGES);
+}
+
+function normaliseImageType(ct: string | null | undefined): ImageType | undefined {
+  const t = (ct ?? "").split(";")[0].trim().toLowerCase().replace("image/jpg", "image/jpeg");
+  return (IMAGE_TYPES as readonly string[]).includes(t) ? (t as ImageType) : undefined;
+}
+
+// Downloads one photo for the model. Returns undefined (and the reply falls back to
+// the text note) on any failure: expired CDN link, unsupported type, too large.
+export async function fetchImage(a: ChatwootAttachment): Promise<{ media_type: ImageType; data: string } | undefined> {
+  try {
+    const res = await fetch(a.data_url!, { redirect: "follow" });
+    if (!res.ok) { console.warn(`image fetch ${res.status}`); return undefined; }
+    const media_type = normaliseImageType(res.headers.get("content-type")) ?? normaliseImageType(a.content_type);
+    if (!media_type) { console.warn(`image type not supported: ${res.headers.get("content-type")}`); return undefined; }
+    const buf = await res.arrayBuffer();
+    if (buf.byteLength > MAX_IMAGE_BYTES) { console.warn(`image too large: ${buf.byteLength} bytes`); return undefined; }
+    return { media_type, data: Buffer.from(buf).toString("base64") };
+  } catch (e) {
+    console.warn("image fetch failed:", (e as Error).message);
+    return undefined;
   }
 }
