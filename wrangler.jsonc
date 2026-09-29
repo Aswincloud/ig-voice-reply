@@ -43,7 +43,7 @@
     // 0 = reply to every message. Set to e.g. 60 for one reply per hour.
     "REPLY_COOLDOWN_MINUTES": "0",
     // Reply generation. The persona lives in src/prompt.ts.
-    "ANTHROPIC_MODEL": "claude-opus-5",
+    "ANTHROPIC_MODEL": "claude-opus-5-5",
     "MAX_REPLY_CHARS": "180",
     // ElevenLabs credits per day (owner's day, Asia/Kolkata). Counted as characters
     // sent to TTS. When the remainder is too small for another reply, SIGNOFF_TEXT

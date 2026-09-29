@@ -236,7 +236,7 @@ Non-secret settings live in `wrangler.jsonc` under `vars`.
 
 | var | default | meaning |
 |---|---|---|
-| `ANTHROPIC_MODEL` | `claude-opus-5` | writes the reply |
+| `ANTHROPIC_MODEL` | `claude-opus-5-5` | writes the reply |
 | `MAX_REPLY_CHARS` | `180` | hard cap on a spoken reply; trimmed at a sentence end |
 | `DAILY_CREDIT_LIMIT` | `1000` | ElevenLabs credits per IST day; `0` disables |
 | `SIGNOFF_TEXT` | Tamil "I have some work, talk later" | spoken once when the budget is nearly gone |
