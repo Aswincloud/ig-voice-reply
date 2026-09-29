@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
-import { verifyChatwootSignature, safeEqual, isIncomingMessage, contactOf, contactMatches, instagramUsername, audioForm, describeIncoming, imagesOf, type ChatwootEvent } from "./chatwoot.ts";
+import { verifyChatwootSignature, safeEqual, isIncomingMessage, contactOf, contactMatches, instagramUsername, audioForm, describeIncoming, imagesOf, sniffImageType, type ChatwootEvent } from "./chatwoot.ts";
 
 const secret = "whsec_test";
 const body = JSON.stringify({ event: "message_created", id: 1, content: "hi" });
@@ -103,4 +103,13 @@ test("only photos with a URL are passed to the model, at most three", () => {
   assert.equal(imagesOf({ attachments: [img, { file_type: "audio", data_url: "https://x/a" }, { file_type: "image" }] }).length, 1);
   assert.equal(imagesOf({ attachments: [img, img, img, img] }).length, 3);
   assert.equal(imagesOf({}).length, 0);
+});
+
+test("image type comes from the bytes, not the header", () => {
+  assert.equal(sniffImageType(new Uint8Array([0xff, 0xd8, 0xff, 0xe0])), "image/jpeg");
+  assert.equal(sniffImageType(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), "image/png");
+  assert.equal(sniffImageType(new TextEncoder().encode("GIF89a")), "image/gif");
+  assert.equal(sniffImageType(new TextEncoder().encode("RIFF\x00\x00\x00\x00WEBPVP8 ")), "image/webp");
+  assert.equal(sniffImageType(new TextEncoder().encode("<!DOCTYPE html>")), undefined);
+  assert.equal(sniffImageType(new Uint8Array([])), undefined);
 });

@@ -206,9 +206,18 @@ export function imagesOf(evt: ChatwootEvent): ChatwootAttachment[] {
   return (evt.attachments ?? []).filter((a) => a.file_type === "image" && !!a.data_url).slice(0, MAX_IMAGES);
 }
 
-function normaliseImageType(ct: string | null | undefined): ImageType | undefined {
-  const t = (ct ?? "").split(";")[0].trim().toLowerCase().replace("image/jpg", "image/jpeg");
-  return (IMAGE_TYPES as readonly string[]).includes(t) ? (t as ImageType) : undefined;
+// Identify an image by its magic bytes.
+export function sniffImageType(b: Uint8Array): ImageType | undefined {
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b.length >= 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "image/png";
+  if (b.length >= 6 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38) return "image/gif";
+  if (b.length >= 12 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46
+      && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return "image/webp";
+  return undefined;
+}
+
+function hexStart(buf: ArrayBuffer): string {
+  return [...new Uint8Array(buf.slice(0, 12))].map((x) => x.toString(16).padStart(2, "0")).join("");
 }
 
 // Downloads one photo for the model. Returns undefined (and the reply falls back to
@@ -217,10 +226,16 @@ export async function fetchImage(a: ChatwootAttachment): Promise<{ media_type: I
   try {
     const res = await fetch(a.data_url!, { redirect: "follow" });
     if (!res.ok) { console.warn(`image fetch ${res.status}`); return undefined; }
-    const media_type = normaliseImageType(res.headers.get("content-type")) ?? normaliseImageType(a.content_type);
-    if (!media_type) { console.warn(`image type not supported: ${res.headers.get("content-type")}`); return undefined; }
     const buf = await res.arrayBuffer();
     if (buf.byteLength > MAX_IMAGE_BYTES) { console.warn(`image too large: ${buf.byteLength} bytes`); return undefined; }
+    // Trust the bytes, not the header: a CDN can serve WebP (or an error page)
+    // under a JPEG content-type, and Claude rejects a mismatched media type with
+    // "Could not process image".
+    const media_type = sniffImageType(new Uint8Array(buf));
+    if (!media_type) {
+      console.warn(`not a supported image: header ${res.headers.get("content-type")}, ${buf.byteLength} bytes, starts ${hexStart(buf)}`);
+      return undefined;
+    }
     return { media_type, data: Buffer.from(buf).toString("base64") };
   } catch (e) {
     console.warn("image fetch failed:", (e as Error).message);
