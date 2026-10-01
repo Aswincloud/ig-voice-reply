@@ -238,7 +238,7 @@ Non-secret settings live in `wrangler.jsonc` under `vars`.
 |---|---|---|
 | `ANTHROPIC_MODEL` | `claude-opus-5-5` | writes the reply |
 | `MAX_REPLY_CHARS` | `180` | hard cap on a spoken reply; trimmed at a sentence end |
-| `DAILY_CREDIT_LIMIT` | `1000` | ElevenLabs credits per IST day; `0` disables |
+| `DAILY_CREDIT_LIMIT` | `1500` | ElevenLabs credits per IST day; `0` disables |
 | `SIGNOFF_TEXT` | Tamil "I have some work, talk later" | spoken once when the budget is nearly gone |
 | `REFUSAL_TEXT` | Tamil "let's not talk about that" | spoken when Claude declines |
 | `FALLBACK_TEXT` | Tamil "saw your message, Aswin will reply" | spoken when Claude is unreachable |
