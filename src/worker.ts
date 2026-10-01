@@ -62,7 +62,7 @@ const PCM_RATE = 24000; // must match output_format=pcm_24000 below
 const AUDIO_TTL_S = 300; // Instagram fetches within seconds; 5 min is generous
 const SEEN_TTL_S = 600; // deliveries get retried; dedupe on message id
 const TOKEN_CHECK_TTL_S = 300; // /health re-validates tokens at most this often
-const VERSION = "0.5.2";
+const VERSION = "0.5.3";
 const HISTORY_TURNS = 12; // messages kept per person for context
 const HISTORY_TTL_S = 48 * 3600;
 const USAGE_TTL_S = 2 * 86400;

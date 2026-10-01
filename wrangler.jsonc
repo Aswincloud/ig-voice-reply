@@ -48,7 +48,7 @@
     // ElevenLabs credits per day (owner's day, Asia/Kolkata). Counted as characters
     // sent to TTS. When the remainder is too small for another reply, SIGNOFF_TEXT
     // is spoken once and the Worker stays quiet until the next day. 0 disables.
-    "DAILY_CREDIT_LIMIT": "1000",
+    "DAILY_CREDIT_LIMIT": "1500",
     "SIGNOFF_TEXT": "சரி, எனக்கு கொஞ்சம் வேலை இருக்கு. நான் அப்புறம் பேசுறேன்!",
     // Spoken when Claude declines the topic (18+ etc.) — a light deflection.
     "REFUSAL_TEXT": "ஐயோ, அதைப் பற்றி வேணாம் டா. வேற எதாவது சொல்லு!",
