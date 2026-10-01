@@ -18,7 +18,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { pcmToWav } from "./wav.ts";
 import { verifyMetaSignature } from "./verify.ts";
 import { istDate, decideBudget } from "./budget.ts";
-import { generateReply } from "./llm.ts";
+import { generateReply, updateProfile } from "./llm.ts";
 import {
   type ChatwootEvent, verifyChatwootSignature, safeEqual, isIncomingMessage, contactOf, instagramUsername,
   contactMatches, describeContact, sendChatwootAudio, sendChatwootNote, chatwootTokenCheck,
@@ -62,9 +62,11 @@ const PCM_RATE = 24000; // must match output_format=pcm_24000 below
 const AUDIO_TTL_S = 300; // Instagram fetches within seconds; 5 min is generous
 const SEEN_TTL_S = 600; // deliveries get retried; dedupe on message id
 const TOKEN_CHECK_TTL_S = 300; // /health re-validates tokens at most this often
-const VERSION = "0.5.3";
-const HISTORY_TURNS = 12; // messages kept per person for context
-const HISTORY_TTL_S = 48 * 3600;
+const VERSION = "0.6.0";
+const HISTORY_TURNS = 30; // messages kept per person for context
+// History and the long-term profile are kept indefinitely (no KV expiry): the friend
+// may not write for weeks. History is bounded by HISTORY_TURNS instead.
+const PROFILE_EVERY = 10; // refresh the long-term profile every N of his messages
 const USAGE_TTL_S = 2 * 86400;
 const CHATWOOT_PREFIX = "/chatwoot/";
 
@@ -326,7 +328,8 @@ async function replyTo(env: Env, person: Person, incoming: string, deliver: Deli
           { type: "text" as const, text: incoming },
         ] }]
       : history;
-    const r = await generateReply(env, turn, Math.min(maxChars, decision.room));
+    const profile = (await env.KV.get(`profile:${person.key}`)) ?? "";
+    const r = await generateReply(env, turn, Math.min(maxChars, decision.room), profile);
     said = r.text; kind = r.kind;
   }
   // Log the line itself. This is a one-owner bot; seeing what it said to the one
@@ -349,7 +352,18 @@ async function replyTo(env: Env, person: Person, incoming: string, deliver: Deli
   if (kind === "reply" || kind === "refusal") {
     history.push({ role: "assistant", content: said });
     history = history.slice(-HISTORY_TURNS);
-    await env.KV.put(histKey, JSON.stringify(history), { expirationTtl: HISTORY_TTL_S });
+    await env.KV.put(histKey, JSON.stringify(history));
+    // Every PROFILE_EVERY messages, fold what he revealed into the long-term profile.
+    const countKey = `profile_count:${person.key}`;
+    const count = Number((await env.KV.get(countKey)) ?? 0) + 1;
+    if (count >= PROFILE_EVERY) {
+      const profileKey = `profile:${person.key}`;
+      const updated = await updateProfile(env, (await env.KV.get(profileKey)) ?? "", history);
+      if (updated) { await env.KV.put(profileKey, updated); console.log(`profile updated: ${updated.length} chars`); }
+      await env.KV.put(countKey, "0");
+    } else {
+      await env.KV.put(countKey, String(count));
+    }
   }
   if (cooldownMin > 0) await env.KV.put(lastKey, String(Date.now()), { expirationTtl: cooldownMin * 60 + 60 });
   console.log(`replied (${kind}) to ${person.label}: ${said.length} chars = ${cost} credits, ${wav.byteLength} bytes audio, ${nowUsed}/${limit} credits today`);
