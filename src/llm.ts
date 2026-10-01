@@ -15,7 +15,7 @@ export interface LlmEnv {
 // deflection when Claude declines (that is the desired outcome for 18+ content,
 // which is why no fallback model is configured here), and a fixed fallback line
 // when the API is unavailable, so the friend still hears something.
-export async function generateReply(env: LlmEnv, history: Anthropic.MessageParam[], maxChars: number): Promise<{ text: string; kind: ReplyKind }> {
+export async function generateReply(env: LlmEnv, history: Anthropic.MessageParam[], maxChars: number, profile = ""): Promise<{ text: string; kind: ReplyKind }> {
   if (!env.ANTHROPIC_API_KEY) return { text: env.FALLBACK_TEXT, kind: "fallback" };
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, ...(env.ANTHROPIC_BASE_URL ? { baseURL: env.ANTHROPIC_BASE_URL } : {}) });
   try {
@@ -26,7 +26,7 @@ export async function generateReply(env: LlmEnv, history: Anthropic.MessageParam
       // Opus 5 but Opus 5.5 thinks longer and got cut off mid-word.
       max_tokens: 1024,
       output_config: { effort: "low" },
-      system: SYSTEM_PROMPT,
+      system: profile ? `${SYSTEM_PROMPT}\n\nWhat you already know about him from earlier conversations (use it naturally, do not recite it, and do not ask again about things listed here):\n${profile}` : SYSTEM_PROMPT,
       messages: history,
     });
     if (response.stop_reason === "refusal") return { text: env.REFUSAL_TEXT, kind: "refusal" };
@@ -60,4 +60,28 @@ export function trimToSentence(text: string, max: number): string {
 export function completeSentences(text: string): string {
   const end = Math.max(text.lastIndexOf("."), text.lastIndexOf("!"), text.lastIndexOf("?"));
   return end >= 0 ? text.slice(0, end + 1).trim() : "";
+}
+
+// Long-term memory. The recent chat is kept only as a window of turns, so every
+// few messages Claude folds what was learned about the friend into a short
+// profile that is kept indefinitely and goes into every reply.
+const PROFILE_MAX_CHARS = 1500;
+export async function updateProfile(env: LlmEnv, profile: string, recent: Anthropic.MessageParam[]): Promise<string | undefined> {
+  if (!env.ANTHROPIC_API_KEY) return undefined;
+  const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, ...(env.ANTHROPIC_BASE_URL ? { baseURL: env.ANTHROPIC_BASE_URL } : {}) });
+  const transcript = recent.map((m) => `${m.role === "user" ? "HIM" : "YAZHINI"}: ${typeof m.content === "string" ? m.content : "[message]"}`).join("\n");
+  try {
+    const r = await client.messages.create({
+      model: env.ANTHROPIC_MODEL,
+      max_tokens: 1024,
+      output_config: { effort: "low" },
+      system: `You maintain a short memory file about one person, Raagul, from his chats with Yazhini. Merge the existing notes with anything new he revealed about himself in the recent chat: likes and dislikes, food, films, music, family, friends, home town, memories, plans, feelings, things he asked her to remember, running jokes, and topics already asked about. Keep facts he stated; do not invent or guess. Drop nothing still true; replace anything he corrected. Output only the updated notes as short English bullet lines, at most ${PROFILE_MAX_CHARS} characters in total.`,
+      messages: [{ role: "user", content: `EXISTING NOTES:\n${profile || "(none yet)"}\n\nRECENT CHAT:\n${transcript}` }],
+    });
+    const text = r.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("").trim();
+    return text ? text.slice(0, PROFILE_MAX_CHARS) : undefined;
+  } catch (e) {
+    console.warn("profile update failed:", (e as Error).message);
+    return undefined;
+  }
 }
