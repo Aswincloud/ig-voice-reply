@@ -26,3 +26,23 @@ export function decideBudget(used: number, limit: number, estimate: number, rese
   if (!signoffSent && remaining >= reserve) return { kind: "signoff" };
   return { kind: "stop" };
 }
+
+// ---- carry-forward allowance ---------------------------------------------------
+// Each IST day adds `daily` credits to the balance; whatever is not spent carries
+// forward, but the balance never exceeds `max`. The balance for today is computed
+// lazily on the first request of the day from yesterday's (or the last active
+// day's) allowance minus what was spent on it.
+
+export interface AllowanceState { day: string; available: number }
+
+export function daysBetween(a: string, b: string): number {
+  return Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 86_400_000);
+}
+
+export function rollAllowance(prev: AllowanceState | null, prevUsed: number, today: string, daily: number, max: number): AllowanceState {
+  if (!prev) return { day: today, available: Math.min(max, daily) };
+  if (prev.day === today) return prev;
+  const elapsed = Math.max(1, daysBetween(prev.day, today));
+  const carry = Math.max(0, prev.available - prevUsed);
+  return { day: today, available: Math.min(max, carry + daily * elapsed) };
+}

@@ -17,7 +17,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { pcmToWav } from "./wav.ts";
 import { verifyMetaSignature } from "./verify.ts";
-import { istDate, decideBudget } from "./budget.ts";
+import { istDate, decideBudget, rollAllowance, type AllowanceState } from "./budget.ts";
 import { generateReply, updateProfile } from "./llm.ts";
 import {
   type ChatwootEvent, verifyChatwootSignature, safeEqual, isIncomingMessage, contactOf, instagramUsername,
@@ -33,7 +33,8 @@ interface Env {
   ELEVENLABS_MODEL_ID: string;
   REPLY_COOLDOWN_MINUTES: string;
   ANTHROPIC_MODEL: string;
-  DAILY_CREDIT_LIMIT: string; // ElevenLabs credits per IST day; 0 disables
+  DAILY_CREDIT_LIMIT: string; // ElevenLabs credits added per IST day; 0 disables the budget
+  DAILY_CREDIT_MAX: string; // unused credits carry forward, but the balance never exceeds this
   MAX_REPLY_CHARS: string;
   SIGNOFF_TEXT: string; // spoken once when the day's budget is nearly used up
   REFUSAL_TEXT: string; // spoken when Claude declines the topic
@@ -62,12 +63,12 @@ const PCM_RATE = 24000; // must match output_format=pcm_24000 below
 const AUDIO_TTL_S = 300; // Instagram fetches within seconds; 5 min is generous
 const SEEN_TTL_S = 600; // deliveries get retried; dedupe on message id
 const TOKEN_CHECK_TTL_S = 300; // /health re-validates tokens at most this often
-const VERSION = "0.6.0";
+const VERSION = "0.7.0";
 const HISTORY_TURNS = 30; // messages kept per person for context
 // History and the long-term profile are kept indefinitely (no KV expiry): the friend
 // may not write for weeks. History is bounded by HISTORY_TURNS instead.
 const PROFILE_EVERY = 10; // refresh the long-term profile every N of his messages
-const USAGE_TTL_S = 2 * 86400;
+const USAGE_TTL_S = 45 * 86400; // long enough to roll over after a quiet stretch
 const CHATWOOT_PREFIX = "/chatwoot/";
 
 // ---- Meta webhook payload (only the fields used) ----------------------------
@@ -170,7 +171,9 @@ async function health(env: Env): Promise<Response> {
   const usage = {
     date: today,
     credits_used: Number((await env.KV.get(`usage:${today}`)) ?? 0),
-    limit: parseInt(env.DAILY_CREDIT_LIMIT || "0", 10),
+    limit: await todaysAllowance(env, today), // today's allowance incl. carry-forward
+    daily: parseInt(env.DAILY_CREDIT_LIMIT || "0", 10),
+    max: parseInt(env.DAILY_CREDIT_MAX || env.DAILY_CREDIT_LIMIT || "0", 10),
     signoff_sent: !!(await env.KV.get(`signoff:${today}`)),
   };
   const notConfigured = { valid: null as boolean | null, checked_at: null as string | null, note: "not configured" };
@@ -306,7 +309,7 @@ async function replyTo(env: Env, person: Person, incoming: string, deliver: Deli
   // ---- daily credit budget -------------------------------------------------
   const today = istDate();
   const used = Number((await env.KV.get(`usage:${today}`)) ?? 0);
-  const limit = parseInt(env.DAILY_CREDIT_LIMIT || "0", 10);
+  const limit = await todaysAllowance(env, today);
   const maxChars = parseInt(env.MAX_REPLY_CHARS || "160", 10);
   const signoffSent = !!(await env.KV.get(`signoff:${today}`));
   const decision = decideBudget(used, limit, maxChars, env.SIGNOFF_TEXT.length + 10, signoffSent);
@@ -367,6 +370,19 @@ async function replyTo(env: Env, person: Person, incoming: string, deliver: Deli
   }
   if (cooldownMin > 0) await env.KV.put(lastKey, String(Date.now()), { expirationTtl: cooldownMin * 60 + 60 });
   console.log(`replied (${kind}) to ${person.label}: ${said.length} chars = ${cost} credits, ${wav.byteLength} bytes audio, ${nowUsed}/${limit} credits today`);
+}
+
+// Today's allowance: the daily credits plus whatever went unspent before, capped.
+async function todaysAllowance(env: Env, today: string): Promise<number> {
+  const daily = parseInt(env.DAILY_CREDIT_LIMIT || "0", 10);
+  if (daily <= 0) return 0;
+  const max = parseInt(env.DAILY_CREDIT_MAX || String(daily), 10);
+  const prev = (await env.KV.get("allowance", { type: "json" })) as AllowanceState | null;
+  if (prev?.day === today) return prev.available;
+  const prevUsed = prev ? Number((await env.KV.get(`usage:${prev.day}`)) ?? 0) : 0;
+  const next = rollAllowance(prev, prevUsed, today, daily, max);
+  await env.KV.put("allowance", JSON.stringify(next));
+  return next.available;
 }
 
 // True the first time a key is seen; false on a redelivery.
