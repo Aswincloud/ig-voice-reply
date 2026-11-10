@@ -27,6 +27,10 @@
   //   profile:cw:<id>     long-term notes about the contact, refreshed every 10 messages, no expiry
   //   profile_count:cw:<id> messages since the last profile refresh
   //   health:chatwoot     cached result of the Chatwoot token check, TTL 5 min
+  // Workers VPC: litellm.aswincloud.com is tailnet/LAN only, so Claude calls reach it through the
+  // existing ubuntu Cloudflare Tunnel. VPC Service "litellm" targets 192.168.0.121:443 (host nginx).
+  "vpc_services": [{ "binding": "LITELLM_VPC", "service_id": "01a1c540-6c43-7ae0-8e72-f8355ea2e16f" }],
+
   "kv_namespaces": [{ "binding": "KV", "id": "a12760194cd24c1796d1c8379a79b6ae" }],
 
 

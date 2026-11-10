@@ -66,7 +66,7 @@ const PCM_RATE = 24000; // must match output_format=pcm_24000 below
 const AUDIO_TTL_S = 300; // Instagram fetches within seconds; 5 min is generous
 const SEEN_TTL_S = 600; // deliveries get retried; dedupe on message id
 const TOKEN_CHECK_TTL_S = 300; // /health re-validates tokens at most this often
-const VERSION = "0.7.2";
+const VERSION = "0.7.3";
 const HISTORY_TURNS = 30; // messages kept per person for context
 // History and the long-term profile are kept indefinitely (no KV expiry): the friend
 // may not write for weeks. History is bounded by HISTORY_TURNS instead.
@@ -185,9 +185,10 @@ async function health(env: Env): Promise<Response> {
   // Healthy means: it can speak, and at least one route will actually reply to someone.
   const metaReady = configured.meta && configured.allowlist && token.valid === true;
   const chatwootReady = configured.chatwoot_webhook && configured.chatwoot_api && configured.chatwoot_allowlist && chatwoot_token.valid === true;
+  const llm_gateway = await gatewayStatus(env);
   const ok = configured.elevenlabs && configured.llm && (metaReady || chatwootReady);
   const routes = { meta: metaReady ? "replying" : "idle", chatwoot: chatwootReady ? "replying" : "idle" };
-  return new Response(JSON.stringify({ ok, version: VERSION, routes, configured, token, chatwoot_token, usage_today: usage }, null, 2), {
+  return new Response(JSON.stringify({ ok, version: VERSION, routes, configured, token, chatwoot_token, llm_gateway, usage_today: usage }, null, 2), {
     status: ok ? 200 : 503,
     headers: { "content-type": "application/json", "cache-control": "no-store" },
   });
@@ -386,6 +387,20 @@ async function todaysAllowance(env: Env, today: string): Promise<number> {
   const next = rollAllowance(prev, prevUsed, today, daily, max);
   await env.KV.put("allowance", JSON.stringify(next));
   return next.available;
+}
+
+// Can the Worker reach the LLM gateway? Through the Workers VPC binding when bound (the gateway is
+// tailnet-only), else over the internet. Uses LiteLLM's unauthenticated liveness endpoint.
+async function gatewayStatus(env: Env): Promise<{ via: string; reachable: boolean; status?: number; error?: string }> {
+  if (!env.ANTHROPIC_BASE_URL) return { via: "direct api", reachable: true };
+  const url = `${env.ANTHROPIC_BASE_URL.replace(/\/$/, "")}/health/liveliness`;
+  const via = env.LITELLM_VPC ? "workers vpc" : "internet";
+  try {
+    const res = await (env.LITELLM_VPC ? env.LITELLM_VPC.fetch(url, { signal: AbortSignal.timeout(5000) }) : fetch(url, { signal: AbortSignal.timeout(5000) }));
+    return { via, reachable: res.ok, status: res.status };
+  } catch (e) {
+    return { via, reachable: false, error: (e as Error).message.slice(0, 160) };
+  }
 }
 
 // True the first time a key is seen; false on a redelivery.
