@@ -10,6 +10,10 @@ export interface LlmEnv {
   // (litellm.aswincloud.com) is behind Access. Unset: no extra headers.
   CF_ACCESS_CLIENT_ID?: string;
   CF_ACCESS_CLIENT_SECRET?: string;
+  // Optional Workers VPC binding to the private LiteLLM (through the existing Cloudflare Tunnel).
+  // When bound, every Claude call goes through it instead of the public internet; the URL's host
+  // (ANTHROPIC_BASE_URL) only sets the Host header and TLS SNI, the VPC Service fixes the target.
+  LITELLM_VPC?: { fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> };
   ANTHROPIC_MODEL: string;
   REFUSAL_TEXT: string;
   FALLBACK_TEXT: string;
@@ -102,5 +106,6 @@ function makeClient(env: LlmEnv): Anthropic {
     apiKey: env.ANTHROPIC_API_KEY,
     ...(env.ANTHROPIC_BASE_URL ? { baseURL: env.ANTHROPIC_BASE_URL } : {}),
     defaultHeaders: accessHeaders(env),
+    ...(env.LITELLM_VPC ? { fetch: (input: RequestInfo | URL, init?: RequestInit) => env.LITELLM_VPC!.fetch(input, init) } : {}),
   });
 }
