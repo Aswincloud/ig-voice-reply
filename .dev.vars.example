@@ -43,3 +43,9 @@ CHATWOOT_WEBHOOK_SECRET=
 # without @) or their Chatwoot contact id. Leave unset at first; the Worker logs
 # each incoming sender until this is configured.
 CHATWOOT_ALLOWED_CONTACT=
+
+# Cloudflare Access service token for litellm.aswincloud.com (Zero Trust → Access → Service Auth).
+# Sent as CF-Access-Client-Id / CF-Access-Client-Secret on every LiteLLM call. Leave unset if the
+# gateway is not behind Access.
+CF_ACCESS_CLIENT_ID=
+CF_ACCESS_CLIENT_SECRET=
