@@ -47,6 +47,8 @@ interface Env {
   ELEVENLABS_VOICE_ID?: string;
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_BASE_URL?: string;
+  CF_ACCESS_CLIENT_ID?: string; // Cloudflare Access service token for litellm.aswincloud.com
+  CF_ACCESS_CLIENT_SECRET?: string;
   META_APP_SECRET?: string;
   WEBHOOK_VERIFY_TOKEN?: string;
   IG_ACCESS_TOKEN?: string; // Page access token, permanent
@@ -63,7 +65,7 @@ const PCM_RATE = 24000; // must match output_format=pcm_24000 below
 const AUDIO_TTL_S = 300; // Instagram fetches within seconds; 5 min is generous
 const SEEN_TTL_S = 600; // deliveries get retried; dedupe on message id
 const TOKEN_CHECK_TTL_S = 300; // /health re-validates tokens at most this often
-const VERSION = "0.7.0";
+const VERSION = "0.7.1";
 const HISTORY_TURNS = 30; // messages kept per person for context
 // History and the long-term profile are kept indefinitely (no KV expiry): the friend
 // may not write for weeks. History is bounded by HISTORY_TURNS instead.

@@ -6,6 +6,10 @@ export type ReplyKind = "reply" | "refusal" | "fallback";
 export interface LlmEnv {
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_BASE_URL?: string; // optional: a gateway in front of the API
+  // Optional Cloudflare Access service token, sent on every call when the gateway
+  // (litellm.aswincloud.com) is behind Access. Unset: no extra headers.
+  CF_ACCESS_CLIENT_ID?: string;
+  CF_ACCESS_CLIENT_SECRET?: string;
   ANTHROPIC_MODEL: string;
   REFUSAL_TEXT: string;
   FALLBACK_TEXT: string;
@@ -17,7 +21,7 @@ export interface LlmEnv {
 // when the API is unavailable, so the friend still hears something.
 export async function generateReply(env: LlmEnv, history: Anthropic.MessageParam[], maxChars: number, profile = ""): Promise<{ text: string; kind: ReplyKind }> {
   if (!env.ANTHROPIC_API_KEY) return { text: env.FALLBACK_TEXT, kind: "fallback" };
-  const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, ...(env.ANTHROPIC_BASE_URL ? { baseURL: env.ANTHROPIC_BASE_URL } : {}) });
+  const client = makeClient(env);
   try {
     const response = await client.messages.create({
       model: env.ANTHROPIC_MODEL,
@@ -68,7 +72,7 @@ export function completeSentences(text: string): string {
 const PROFILE_MAX_CHARS = 1500;
 export async function updateProfile(env: LlmEnv, profile: string, recent: Anthropic.MessageParam[]): Promise<string | undefined> {
   if (!env.ANTHROPIC_API_KEY) return undefined;
-  const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, ...(env.ANTHROPIC_BASE_URL ? { baseURL: env.ANTHROPIC_BASE_URL } : {}) });
+  const client = makeClient(env);
   const transcript = recent.map((m) => `${m.role === "user" ? "HIM" : "YAZHINI"}: ${typeof m.content === "string" ? m.content : "[message]"}`).join("\n");
   try {
     const r = await client.messages.create({
@@ -84,4 +88,19 @@ export async function updateProfile(env: LlmEnv, profile: string, recent: Anthro
     console.warn("profile update failed:", (e as Error).message);
     return undefined;
   }
+}
+
+// Headers Cloudflare Access expects from a service token. Both values or nothing.
+export function accessHeaders(env: Pick<LlmEnv, "CF_ACCESS_CLIENT_ID" | "CF_ACCESS_CLIENT_SECRET">): Record<string, string> {
+  return env.CF_ACCESS_CLIENT_ID && env.CF_ACCESS_CLIENT_SECRET
+    ? { "CF-Access-Client-Id": env.CF_ACCESS_CLIENT_ID, "CF-Access-Client-Secret": env.CF_ACCESS_CLIENT_SECRET }
+    : {};
+}
+
+function makeClient(env: LlmEnv): Anthropic {
+  return new Anthropic({
+    apiKey: env.ANTHROPIC_API_KEY,
+    ...(env.ANTHROPIC_BASE_URL ? { baseURL: env.ANTHROPIC_BASE_URL } : {}),
+    defaultHeaders: accessHeaders(env),
+  });
 }
